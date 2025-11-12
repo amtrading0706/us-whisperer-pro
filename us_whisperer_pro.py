@@ -4,13 +4,13 @@ import pandas as pd
 import yfinance as yf
 import requests
 from transformers import pipeline
-from datetime import datetime, timedelta
+from datetime import datetime
 import xml.etree.ElementTree as ET
 import re
-import time
+from io import StringIO
 
 # -------------------------------
-# 1. S&P 500 Tickers (Full List - 100+)
+# 1. S&P 500 Tickers (Top 100+)
 # -------------------------------
 SP500 = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'V',
@@ -26,28 +26,45 @@ SP500 = [
 ]
 
 # -------------------------------
-# 2. Load FinBERT
+# 2. Load FinBERT (Cached)
 # -------------------------------
 @st.cache_resource
 def load_model():
     return pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
 
 # -------------------------------
-# 3. Earnings Calendar
+# 3. Earnings Calendar (Fix: StringIO + Clean EPS)
 # -------------------------------
 def get_earnings_today():
     url = f"https://finance.yahoo.com/calendar/earnings?day={datetime.now().strftime('%Y-%m-%d')}"
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        dfs = pd.read_html(requests.get(url, headers=headers, timeout=10).text)
+        response = requests.get(url, headers=headers, timeout=10)
+        dfs = pd.read_html(StringIO(response.text))  # Fix deprecation
         df = dfs[0]
         df = df[df['Symbol'].isin(SP500)]
-        return df[['Symbol', 'Company', 'EPS Estimate', 'Reported EPS']].dropna()
+        if df.empty:
+            return pd.DataFrame()
+
+        # Clean EPS columns
+        def clean_eps(x):
+            if pd.isna(x): return None
+            x = str(x).replace(',', '').strip()
+            if x in ['—', '-', '']: return None
+            try:
+                return float(x)
+            except:
+                return None
+
+        df['EPS Estimate'] = df['EPS Estimate'].apply(clean_eps)
+        df['Reported EPS'] = df['Reported EPS'].apply(clean_eps)
+        df = df.dropna(subset=['EPS Estimate', 'Reported EPS'])
+        return df[['Symbol', 'Company', 'EPS Estimate', 'Reported EPS']]
     except:
         return pd.DataFrame()
 
 # -------------------------------
-# 4. 8-K Filings (SEC)
+# 4. 8-K Filings
 # -------------------------------
 def get_8k_filings():
     url = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=100&output=atom"
@@ -66,12 +83,12 @@ def get_8k_filings():
         return pd.DataFrame()
 
 # -------------------------------
-# 5. Insider Buys (OpenInsider)
+# 5. Insider Buys
 # -------------------------------
 def get_insider_buys():
     url = "http://openinsider.com/latest-insider-trading"
     try:
-        dfs = pd.read_html(requests.get(url, timeout=10).text)
+        dfs = pd.read_html(StringIO(requests.get(url, timeout=10).text))
         df = dfs[0]
         df = df[df['Trade Type'] == 'P - Open market purchase']
         df = df[df['Ticker'].isin(SP500)]
@@ -84,7 +101,7 @@ def get_insider_buys():
 # -------------------------------
 def get_price_move(symbol):
     try:
-        data = yf.download(symbol, period="2d", progress=False)
+        data = yf.download(symbol, period="2d", progress=False, threads=False)
         if len(data) >= 2:
             return round((data['Close'].iloc[-1] / data['Close'].iloc[-2] - 1) * 100, 2)
         return None
@@ -117,14 +134,14 @@ def get_signal(row, source):
 def main():
     st.set_page_config(page_title="US Earnings Whisperer PRO", layout="wide")
     st.title("US Earnings Whisperer PRO")
-    st.markdown("**S&P 500 AI Signals: Earnings + 8-K + Insider Buys** | Live Market Edge")
+    st.markdown("**S&P 500 AI Signals: Earnings + 8-K + Insider Buys** | Live Edge")
 
     tab1, tab2, tab3 = st.tabs(["Earnings Today", "8-K Filings", "Insider Buys"])
 
     # === TAB 1: EARNINGS ===
     with tab1:
         if st.button("Scan Earnings (Today)", type="primary"):
-            with st.spinner("Loading earnings data..."):
+            with st.spinner("Loading earnings..."):
                 earnings = get_earnings_today()
                 if not earnings.empty:
                     earnings['Surprise %'] = ((earnings['Reported EPS'] - earnings['EPS Estimate']) / earnings['EPS Estimate'].abs() * 100).round(1)
@@ -133,12 +150,12 @@ def main():
                     st.success(f"{len(earnings)} S&P 500 earnings today!")
                     st.dataframe(earnings[['Symbol', 'Company', 'Surprise %', 'Signal', 'Price Move']], use_container_width=True)
                 else:
-                    st.info("No S&P 500 earnings today.")
+                    st.info("No S&P 500 earnings today. Try tomorrow!")
 
     # === TAB 2: 8-K ===
     with tab2:
         if st.button("Scan 8-K Filings (Last 24h)", type="primary"):
-            with st.spinner("Scraping SEC 8-K..."):
+            with st.spinner("Scraping SEC..."):
                 filings = get_8k_filings()
                 if not filings.empty:
                     model = load_model()
@@ -157,7 +174,7 @@ def main():
                             'Move %': move,
                             'Link': f"[SEC]({row['Link']})"
                         })
-                    df = pd.DataFrame(results).sort_values('Score', descending=True)
+                    df = pd.DataFrame(results).sort_values('Score', ascending=False)
                     st.success(f"{len(df)} 8-K signals!")
                     st.dataframe(df, use_container_width=True)
                 else:
@@ -175,7 +192,7 @@ def main():
                 else:
                     st.info("No insider buys today.")
 
-    st.caption("**LIVE | DEPLOYED | MONETIZABLE** | Sell for **$99/mo** on Gumroad")
+    st.caption("**LIVE | FIXED | MONETIZABLE** | Sell for **$99/mo** on Gumroad")
 
 if __name__ == "__main__":
     main()
