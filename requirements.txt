@@ -1,7 +1,7 @@
 streamlit==1.51.0
 yfinance==0.2.66
 transformers==4.57.1
-torch==2.4.1
+torch==2.5.0
 pandas==2.3.3
 requests==2.32.5
 lxml==6.0.2
