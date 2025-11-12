@@ -1,8 +1,9 @@
-streamlit
-yfinance
-transformers
-pandas
-requests
-lxml  # For better HTML parsing
-websockets  # yfinance fix
-beautifulsoup4  # If not auto-included
+streamlit==1.51.0
+yfinance==0.2.66
+transformers==4.57.1
+torch==2.4.1
+pandas==2.3.3
+requests==2.32.5
+lxml==6.0.2
+websockets==15.0.1
+beautifulsoup4==4.14.2
