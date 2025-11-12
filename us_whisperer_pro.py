@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-from transformers import pipeline
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 import re
