@@ -1,0 +1,8 @@
+streamlit
+yfinance
+transformers
+pandas
+requests
+lxml  # For better HTML parsing
+websockets  # yfinance fix
+beautifulsoup4  # If not auto-included
