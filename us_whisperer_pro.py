@@ -1,7 +1,6 @@
 # us_whisperer_pro.py
 import streamlit as st
 import pandas as pd
-import yfinance as yf
 import requests
 from transformers import pipeline
 from datetime import datetime, timedelta
